@@ -2,6 +2,7 @@ import os
 import time
 import glob
 import re
+from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -16,6 +17,18 @@ from butler_api import upload_invoice
 DOWNLOAD_DIR = os.path.abspath("downloads")
 LOGIN_URL = "https://www.mareon.com/login"
 INVOICES_URL = "https://www.mareon.com/portal/rechnungen"
+
+def save_debug_screenshot(driver, prefix="error"):
+    try:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"{prefix}_{timestamp}.png"
+        filepath = os.path.join(DOWNLOAD_DIR, filename)
+        driver.save_screenshot(filepath)
+        add_log("INFO", f"Debug screenshot saved: {filename}")
+        return filepath
+    except Exception as e:
+        add_log("ERROR", f"Failed to save debug screenshot: {str(e)}")
+        return None
 
 def setup_driver():
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
@@ -84,9 +97,11 @@ def login(driver, username, password):
             
     except TimeoutException:
         add_log("ERROR", f"Timeout during login for user: {username}")
+        save_debug_screenshot(driver, "error_login_timeout")
         return False
     except Exception as e:
         add_log("ERROR", f"Login error for {username}: {str(e)}")
+        save_debug_screenshot(driver, "error_login")
         return False
 
 def switch_mandant(driver, mandant_text):
@@ -99,36 +114,68 @@ def switch_mandant(driver, mandant_text):
         time.sleep(2)
         
         dropdown_selectors = [
+            "div.ui-selectonemenu-trigger",
+            "label.ui-selectonemenu-label",
+            "div.ui-selectonemenu",
             "//div[contains(@class, 'dropdown')]//a",
             "//nav//div[contains(@class, 'dropdown')]",
             "//ul[contains(@class, 'navbar')]//li[contains(@class, 'dropdown')]",
             "//header//div[contains(@class, 'dropdown')]"
         ]
         
+        dropdown_clicked = False
         for selector in dropdown_selectors:
             try:
-                dropdowns = driver.find_elements(By.XPATH, selector)
+                if selector.startswith("//"):
+                    dropdowns = driver.find_elements(By.XPATH, selector)
+                else:
+                    dropdowns = driver.find_elements(By.CSS_SELECTOR, selector)
                 for dropdown in dropdowns:
-                    dropdown.click()
-                    time.sleep(1)
+                    if dropdown.is_displayed():
+                        dropdown.click()
+                        time.sleep(1)
+                        dropdown_clicked = True
+                        add_log("INFO", f"Clicked dropdown using selector: {selector}")
+                        break
+                if dropdown_clicked:
                     break
             except Exception:
                 continue
         
-        mandant_li = WebDriverWait(driver, 5).until(
-            EC.element_to_be_clickable((By.XPATH, f"//li[contains(text(), '{mandant_text}')]"))
-        )
-        mandant_li.click()
+        option_selectors = [
+            f"//li[contains(@class, 'ui-selectonemenu-item') and contains(text(), '{mandant_text}')]",
+            f"//li[contains(@class, 'ui-selectonemenu-item') and contains(., '{mandant_text}')]",
+            f"//li[contains(text(), '{mandant_text}')]"
+        ]
         
-        add_log("INFO", f"Successfully switched to mandant: {mandant_text}")
-        time.sleep(2)
-        return True
+        mandant_li = None
+        for option_selector in option_selectors:
+            try:
+                mandant_li = WebDriverWait(driver, 5).until(
+                    EC.element_to_be_clickable((By.XPATH, option_selector))
+                )
+                if mandant_li:
+                    break
+            except TimeoutException:
+                continue
+        
+        if mandant_li:
+            mandant_li.click()
+            add_log("INFO", f"Successfully switched to mandant: {mandant_text}")
+            time.sleep(2)
+            return True
+        else:
+            add_log("ERROR", f"Could not find mandant option: {mandant_text}")
+            save_debug_screenshot(driver, "error_mandant_notfound")
+            return False
         
     except TimeoutException:
         add_log("ERROR", f"Could not find mandant: {mandant_text}")
+        save_debug_screenshot(driver, "error_mandant_timeout")
         return False
     except Exception as e:
         add_log("ERROR", f"Error switching mandant: {str(e)}")
+        save_debug_screenshot(driver, "error_mandant")
         return False
 
 def wait_for_download(existing_files, timeout=30):
@@ -197,6 +244,7 @@ def process_invoices(driver, api_key):
                 
                 download_link.click()
                 add_log("INFO", f"Clicked download for invoice: {invoice_nr}")
+                time.sleep(1)
                 
                 downloaded_file = wait_for_download(existing_files)
                 
@@ -232,9 +280,11 @@ def process_invoices(driver, api_key):
         
     except TimeoutException:
         add_log("ERROR", "Timeout loading invoices page")
+        save_debug_screenshot(driver, "error_invoices_timeout")
         return 0
     except Exception as e:
         add_log("ERROR", f"Error processing invoices: {str(e)}")
+        save_debug_screenshot(driver, "error_invoices")
         return 0
 
 def run_scraper():
