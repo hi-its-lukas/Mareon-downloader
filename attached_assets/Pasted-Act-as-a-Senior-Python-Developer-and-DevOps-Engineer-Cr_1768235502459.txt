@@ -1,0 +1,53 @@
+Act as a Senior Python Developer and DevOps Engineer. Create a complete, production-ready web application for automating invoice downloads from the "Mareon" portal and uploading them to "Buchhaltungsbutler".
+
+The application must run on Replit but be designed for deployment via Docker. 
+STRICT CONSTRAINT: Do NOT use .env files. All configuration (credentials, API keys) must be managed via the Web UI and stored in a local SQLite database.
+
+Please generate the following file structure and code:
+
+### 1. SYSTEM & DOCKER CONFIGURATION
+- **requirements.txt**: Must include `flask`, `selenium`, `webdriver-manager`, `requests`.
+- **replit.nix**: Add `pkgs.chromium`, `pkgs.chromedriver` for Replit compatibility.
+- **Dockerfile**: Use `python:3.9-slim`. Install `wget`, `gnupg`, `curl`. Install Google Chrome Stable (essential for Selenium in Docker). Set WORKDIR to `/app`. Expose Port 5000. CMD: `python main.py`.
+- **docker-compose.yml**: Service `mareon_bot`, ports `5000:5000`, volume mapping `./data:/app/data` to persist the SQLite database.
+
+### 2. DATABASE (`database.py`)
+- Use SQLite. Store the DB file at `data/app.db` (ensure folder exists).
+- Table `accounts`: Columns `id`, `name` (label), `mandant_dropdown` (text string), `username`, `password`, `butler_api_key`.
+- Table `history`: Column `rechnungs_nr` (Primary Key) to prevent duplicate downloads.
+- Table `logs`: Columns `id`, `timestamp`, `level` (INFO/ERROR), `message`.
+
+### 3. BACKEND LOGIC (`scraper.py` & `butler_api.py`)
+- **butler_api.py**: Function `upload_invoice(filepath, api_key)`. Target URL: `https://api.buchhaltungsbutler.de/v1/documents`. POST request with file and Auth header.
+- **scraper.py**:
+    - Setup Selenium with Chrome Options: `--headless=new`, `--no-sandbox`, `--disable-dev-shm-usage`.
+    - **Login Logic**: 
+        - URL: `https://www.mareon.com/login`
+        - Username Field ID: `modlgn_username`
+        - Password Field ID: `modlgn_passwd`
+        - Submit Button Name: `Submit`
+    - **Mandant Switching Logic**:
+        - Iterate through all accounts in DB. 
+        - If `mandant_dropdown` is set in DB: Try to find the dropdown element (generic selector for top-bar menu) and click the `<li>` element containing the text `mandant_dropdown`.
+    - **Download Logic**:
+        - Go to `https://www.mareon.com/portal/rechnungen`.
+        - Scan `tbody tr`.
+        - Identify Invoice Number: Text starting with "S-" inside the row.
+        - Identify Download Button: Look for `<a>` tag with attribute `title="Rechnungsdruck"`.
+        - Click to download. Verify file exists in `/app/downloads`.
+        - Upload to Butler using `butler_api.py`.
+        - On success: Add `rechnungs_nr` to `history` table and delete local file.
+    - **Logging**: Log every step to the `logs` table.
+
+### 4. WEB FRONTEND (`main.py` & `templates/index.html`)
+- **main.py**: Flask App. Host `0.0.0.0`, Port `5000`.
+    - Route `/`: Dashboard showing list of accounts (with delete button) and a live view of the `logs` table.
+    - Route `/add`: POST to add a new account to DB.
+    - Route `/run`: Triggers the scraper in a background `threading.Thread`.
+- **templates/index.html**: Clean Bootstrap 5 UI.
+    - Form to add account (Fields: Name, Mandant (optional), User, Password, API Key).
+    - Table showing current accounts.
+    - Scrollable Log Viewer div.
+    - Huge "Start Bot" button.
+
+Generate all files with full code implementation.
