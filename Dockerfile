@@ -20,6 +20,6 @@ COPY . .
 
 RUN mkdir -p /app/data /app/downloads
 
-EXPOSE 5000
+EXPOSE 8080
 
 CMD ["python", "main.py"]
