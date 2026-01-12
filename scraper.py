@@ -51,17 +51,45 @@ def setup_driver():
     }
     chrome_options.add_experimental_option("prefs", prefs)
     
-    try:
-        service = Service("/nix/store/chromium-chromedriver/bin/chromedriver")
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-    except Exception:
+    chrome_bin = os.environ.get("CHROME_BIN")
+    if chrome_bin:
+        chrome_options.binary_location = chrome_bin
+    
+    chromedriver_paths = [
+        os.environ.get("CHROMEDRIVER_PATH"),
+        "/usr/bin/chromedriver",
+        "/usr/local/bin/chromedriver",
+        "/nix/store/chromium-chromedriver/bin/chromedriver",
+    ]
+    
+    driver = None
+    last_error = None
+    
+    for path in chromedriver_paths:
+        if path and os.path.exists(path):
+            try:
+                service = Service(path)
+                driver = webdriver.Chrome(service=service, options=chrome_options)
+                add_log("INFO", f"Using chromedriver at: {path}")
+                break
+            except Exception as e:
+                last_error = e
+                continue
+    
+    if driver is None:
         try:
             service = Service()
             driver = webdriver.Chrome(service=service, options=chrome_options)
+            add_log("INFO", "Using system default chromedriver")
         except Exception:
-            from webdriver_manager.chrome import ChromeDriverManager
-            service = Service(ChromeDriverManager().install())
-            driver = webdriver.Chrome(service=service, options=chrome_options)
+            try:
+                from webdriver_manager.chrome import ChromeDriverManager
+                service = Service(ChromeDriverManager().install())
+                driver = webdriver.Chrome(service=service, options=chrome_options)
+                add_log("INFO", "Using webdriver-manager chromedriver")
+            except Exception as e:
+                add_log("ERROR", f"Failed to initialize WebDriver: {str(e)}")
+                raise
     
     driver.implicitly_wait(10)
     return driver
