@@ -29,9 +29,17 @@ def add():
     username = request.form.get('username', '').strip()
     password = request.form.get('password', '').strip()
     api_key = request.form.get('api_key', '').strip()
+    save_path = request.form.get('save_path', '').strip()
     
-    if name and username and password and api_key:
-        add_account(name, mandant if mandant else None, username, password, api_key)
+    if name and username and password and (api_key or save_path):
+        add_account(
+            name, 
+            mandant if mandant else None, 
+            username, 
+            password, 
+            api_key if api_key else None,
+            save_path if save_path else None
+        )
     
     return redirect(url_for('index'))
 

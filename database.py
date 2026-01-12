@@ -24,9 +24,19 @@ def init_db():
             mandant_dropdown TEXT,
             username TEXT NOT NULL,
             password TEXT NOT NULL,
-            butler_api_key TEXT NOT NULL
+            butler_api_key TEXT,
+            save_path TEXT
         )
     ''')
+    
+    cursor.execute("PRAGMA table_info(accounts)")
+    columns = [col[1] for col in cursor.fetchall()]
+    
+    if 'save_path' not in columns:
+        cursor.execute('ALTER TABLE accounts ADD COLUMN save_path TEXT')
+    
+    if 'butler_api_key' in columns:
+        pass
     
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS history (
@@ -46,13 +56,13 @@ def init_db():
     conn.commit()
     conn.close()
 
-def add_account(name, mandant_dropdown, username, password, butler_api_key):
+def add_account(name, mandant_dropdown, username, password, butler_api_key, save_path):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO accounts (name, mandant_dropdown, username, password, butler_api_key)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (name, mandant_dropdown, username, password, butler_api_key))
+        INSERT INTO accounts (name, mandant_dropdown, username, password, butler_api_key, save_path)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (name, mandant_dropdown, username, password, butler_api_key, save_path))
     conn.commit()
     conn.close()
 

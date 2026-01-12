@@ -84,8 +84,14 @@
                                 <input type="password" class="form-control" name="password" required>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label">Butler API Key</label>
-                                <input type="password" class="form-control" name="api_key" required>
+                                <label class="form-label">Speicherpfad (lokal)</label>
+                                <input type="text" class="form-control" name="save_path" placeholder="/app/data/rechnungen">
+                                <small class="text-muted">Pfad zum lokalen Speichern der Rechnungen</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Butler API Key (optional)</label>
+                                <input type="password" class="form-control" name="api_key">
+                                <small class="text-muted">Optional: Für Upload zu Buchhaltungsbutler</small>
                             </div>
                             <button type="submit" class="btn btn-primary w-100">Add Account</button>
                         </form>
@@ -105,6 +111,7 @@
                                         <th>Name</th>
                                         <th>Mandant</th>
                                         <th>Username</th>
+                                        <th>Speicher</th>
                                         <th>Action</th>
                                     </tr>
                                 </thead>
@@ -114,6 +121,7 @@
                                         <td>{{ account.name }}</td>
                                         <td>{{ account.mandant_dropdown or '-' }}</td>
                                         <td>{{ account.username }}</td>
+                                        <td>{% if account.butler_api_key %}API{% elif account.save_path %}{{ account.save_path[:20] }}...{% else %}-{% endif %}</td>
                                         <td>
                                             <form action="/delete/{{ account.id }}" method="POST" style="display:inline;">
                                                 <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete this account?')">Delete</button>

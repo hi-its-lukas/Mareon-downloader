@@ -225,7 +225,30 @@ def cleanup_downloads():
         except Exception:
             pass
 
-def process_invoices(driver, api_key):
+def save_to_local_path(filepath, save_path, invoice_nr):
+    try:
+        os.makedirs(save_path, exist_ok=True)
+        
+        filename = os.path.basename(filepath)
+        base, ext = os.path.splitext(filename)
+        dest_filename = f"{invoice_nr}{ext}" if invoice_nr else filename
+        dest_path = os.path.join(save_path, dest_filename)
+        
+        counter = 1
+        while os.path.exists(dest_path):
+            dest_filename = f"{invoice_nr}_{counter}{ext}"
+            dest_path = os.path.join(save_path, dest_filename)
+            counter += 1
+        
+        import shutil
+        shutil.move(filepath, dest_path)
+        add_log("INFO", f"Saved invoice to: {dest_path}")
+        return True
+    except Exception as e:
+        add_log("ERROR", f"Failed to save invoice locally: {str(e)}")
+        return False
+
+def process_invoices(driver, api_key, save_path):
     add_log("INFO", "Navigating to invoices page")
     
     try:
@@ -279,21 +302,36 @@ def process_invoices(driver, api_key):
                 if downloaded_file:
                     add_log("INFO", f"Downloaded file: {downloaded_file}")
                     
-                    if upload_invoice(downloaded_file, api_key):
+                    success = False
+                    
+                    if api_key:
+                        if upload_invoice(downloaded_file, api_key):
+                            success = True
+                            try:
+                                os.remove(downloaded_file)
+                                add_log("INFO", f"Deleted local file after upload: {downloaded_file}")
+                            except Exception as e:
+                                add_log("ERROR", f"Could not delete file: {str(e)}")
+                        else:
+                            add_log("ERROR", f"Upload failed for invoice: {invoice_nr}")
+                    
+                    elif save_path:
+                        if save_to_local_path(downloaded_file, save_path, invoice_nr):
+                            success = True
+                        else:
+                            add_log("ERROR", f"Save failed for invoice: {invoice_nr}")
+                    
+                    else:
+                        add_log("ERROR", f"No API key or save path configured for invoice: {invoice_nr}")
+                    
+                    if success:
                         add_to_history(invoice_nr)
-                        
-                        try:
-                            os.remove(downloaded_file)
-                            add_log("INFO", f"Deleted local file: {downloaded_file}")
-                        except Exception as e:
-                            add_log("ERROR", f"Could not delete file: {str(e)}")
-                        
                         processed_count += 1
                     else:
-                        add_log("ERROR", f"Upload failed for invoice: {invoice_nr}")
                         try:
-                            os.remove(downloaded_file)
-                            add_log("INFO", f"Cleaned up failed upload file: {downloaded_file}")
+                            if os.path.exists(downloaded_file):
+                                os.remove(downloaded_file)
+                                add_log("INFO", f"Cleaned up failed file: {downloaded_file}")
                         except Exception:
                             pass
                 else:
@@ -343,7 +381,9 @@ def run_scraper():
                 if account['mandant_dropdown']:
                     switch_mandant(driver, account['mandant_dropdown'])
                 
-                process_invoices(driver, account['butler_api_key'])
+                api_key = account['butler_api_key'] if 'butler_api_key' in account.keys() else None
+                save_path = account['save_path'] if 'save_path' in account.keys() else None
+                process_invoices(driver, api_key, save_path)
             else:
                 add_log("ERROR", f"Skipping account due to login failure: {account_name}")
             
